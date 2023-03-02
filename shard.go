@@ -122,8 +122,15 @@ func (s *cacheShard) set(key string, hashedKey uint64, entry []byte) error {
 
 	s.lock.Lock()
 
+	w := wrapEntry(currentTimestamp, hashedKey, key, entry, &s.entryBuffer)
+
 	if previousIndex := s.hashmap[hashedKey]; previousIndex != 0 {
-		if previousEntry, err := s.entries.Get(int(previousIndex)); err == nil {
+		previousEntry, err := s.entries.Get(int(previousIndex))
+		if len(previousEntry) == len(w) {
+			copy(previousEntry[:], w)
+			s.lock.Unlock()
+			return nil
+		} else if err == nil {
 			resetKeyFromEntry(previousEntry)
 			//remove hashkey
 			delete(s.hashmap, hashedKey)
@@ -135,8 +142,6 @@ func (s *cacheShard) set(key string, hashedKey uint64, entry []byte) error {
 			s.onEvict(oldestEntry, currentTimestamp, s.removeOldestEntry)
 		}
 	}
-
-	w := wrapEntry(currentTimestamp, hashedKey, key, entry, &s.entryBuffer)
 
 	for {
 		if index, err := s.entries.Push(w); err == nil {
